@@ -766,22 +766,26 @@ models::CatalogSetDeps ModelManager::make_catalog_deps(
 }
 
 void ModelManager::build_cache() {
-    models::ModelStore::Build build(store_);
-    if (build.up_to_date()) {
+    while (true) {
+        models::ModelStore::Build build(store_);
+        if (build.up_to_date()) {
+            return;
+        }
+
+        LOG(INFO, "ModelManager") << "Building models cache..." << std::endl;
+
+        models::CompositionResult composed = composition_->run();
+
+        if (!build.commit(std::move(composed.models), std::move(composed.reasons),
+                          std::move(composed.catalogs))) {
+            // A writer changed the registry mid-build. Never return an invalid snapshot.
+            continue;
+        }
+
+        LOG(INFO, "ModelManager") << "Cache built: " << store_.read()->models.size() << " total, "
+                                  << composed.downloaded << " downloaded" << std::endl;
         return;
     }
-
-    LOG(INFO, "ModelManager") << "Building models cache..." << std::endl;
-
-    models::CompositionResult composed = composition_->run();
-
-    if (!build.commit(std::move(composed.models), std::move(composed.reasons),
-                      std::move(composed.catalogs))) {
-        return;
-    }
-
-    LOG(INFO, "ModelManager") << "Cache built: " << store_.read()->models.size() << " total, "
-                              << composed.downloaded << " downloaded" << std::endl;
 }
 
 void ModelManager::update_model_options_in_cache_locked(StoreWrite& store_write,
